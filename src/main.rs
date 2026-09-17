@@ -19,6 +19,7 @@ enum CellStatus {
 fn main() {
     let screen_width: i32 = 1200;
     let screen_height: i32 = 1200;
+    let fps = 60;
     let slices = [40, 40];
     let jump_x = screen_width / slices[0];
     let jump_y = screen_height / slices[1];
@@ -29,8 +30,12 @@ fn main() {
         .vsync()
         .title("Game Of Life")
         .build();
-    rl.set_target_fps(60);
+    rl.set_target_fps(fps);
 
+    let mut count = 0u8;
+    let mut flag = 0;
+    let mut initial_rectangles: HashMap<Rectangle, CellStatus> = HashMap::new();
+    initial_rectangles.clear();
     while !rl.window_should_close() {
         if rl.is_mouse_button_pressed(MouseButton::MOUSE_BUTTON_LEFT) {
             let mouse_position = rl.get_mouse_position();
@@ -48,7 +53,23 @@ fn main() {
             };
         }
         if rl.is_key_pressed(KeyboardKey::KEY_A) {
-            calculate(&mut rectangles, jump_x, jump_y);
+            if flag == 0 {
+                initial_rectangles = rectangles.clone();
+                flag = 1;
+            } else {
+                flag = 0;
+            }
+        }
+        if rl.is_key_pressed(KeyboardKey::KEY_R) {
+            rectangles.clear();
+            rectangles = initial_rectangles.clone();
+        }
+        if flag == 1 {
+            count += 1;
+            if count == 20 && flag == 1 {
+                calculate(&mut rectangles, jump_x, jump_y);
+                count = 0;
+            }
         }
         let mut d = rl.begin_drawing(&thread);
         draw_grid(&mut d, slices, screen_width, screen_height);
