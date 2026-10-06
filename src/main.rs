@@ -72,8 +72,8 @@ fn main() {
             }
         }
         let mut d = rl.begin_drawing(&thread);
-        draw_grid(&mut d, slices, screen_width, screen_height);
         d.clear_background(Color::get_color(0x181818FF));
+        draw_grid(&mut d, slices, screen_width, screen_height);
         for rectangle in rectangles.keys() {
             d.draw_rectangle(rectangle.x, rectangle.y, jump_x, jump_y, Color::RED);
         }
