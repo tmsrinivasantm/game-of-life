@@ -34,7 +34,6 @@ struct Renderobject {
 }
 
 struct Gamecontext {
-    render_objects: HashSet<Renderobject>,
     raylib_handle: RaylibHandle,
     raylib_thread: RaylibThread,
     screen_height: i32,
@@ -46,6 +45,7 @@ struct Gamecontext {
 pub struct Game {
     ctx: Gamecontext,
     keyboard_event_handler: KeyBoardEventHandler,
+    render_objects: HashSet<Renderobject>,
 }
 
 impl Game {
@@ -53,25 +53,25 @@ impl Game {
         let mut pos = 0;
         let jump_x = screen_width / slices[0];
         let jump_y = grid_size / slices[1];
-        self.ctx.render_objects.insert(Renderobject {
+        self.render_objects.insert(Renderobject {
             pos: [pos, 0, pos, grid_size],
             object_type: Objecttypes::Line,
         });
         for _ in 0..slices[0] {
             pos += jump_x;
-            self.ctx.render_objects.insert(Renderobject {
+            self.render_objects.insert(Renderobject {
                 pos: [pos, 0, pos, grid_size],
                 object_type: Objecttypes::Line,
             });
         }
         pos = 0;
-        self.ctx.render_objects.insert(Renderobject {
+        self.render_objects.insert(Renderobject {
             pos: [0, pos, screen_width, pos],
             object_type: Objecttypes::Line,
         });
         for _ in 0..slices[1] {
             pos += jump_y;
-            self.ctx.render_objects.insert(Renderobject {
+            self.render_objects.insert(Renderobject {
                 pos: [0, pos, screen_width, pos],
                 object_type: Objecttypes::Line,
             });
@@ -86,12 +86,25 @@ impl Game {
                 }
                 let rectx = (event_metadata.mouse_pos_x / jump_x) * jump_x;
                 let recty = (event_metadata.mouse_pos_y / jump_y) * jump_y;
-                let render_object = Renderobject {
-                    pos: [rectx, recty, jump_x, jump_y],
-                    object_type: Objecttypes::Rectangle,
+                let rectangle = Rectangle {
+                    x: rectx,
+                    y: recty,
+                    jump_x: jump_x,
+                    jump_y: jump_y,
                 };
-                if !ctx.render_objects.contains(&render_object) {
-                    ctx.render_objects.insert(render_object);
+                let Some(cell_status) = ctx.rectanges.get(&rectangle) else {
+                    ctx.rectanges.insert(
+                        Rectangle {
+                            x: rectx,
+                            y: recty,
+                            jump_x: jump_x,
+                            jump_y: jump_y,
+                        },
+                        CellStatus::Set,
+                    );
+                    return;
+                };
+                if matches!(cell_status, CellStatus::Unset) {
                     ctx.rectanges.insert(
                         Rectangle {
                             x: rectx,
@@ -102,22 +115,21 @@ impl Game {
                         CellStatus::Set,
                     );
                 } else {
-                    ctx.render_objects.remove(&render_object);
-                    ctx.rectanges.remove(&Rectangle {
-                        x: rectx,
-                        y: recty,
-                        jump_x: jump_x,
-                        jump_y: jump_y,
-                    });
+                    ctx.rectanges.insert(
+                        Rectangle {
+                            x: rectx,
+                            y: recty,
+                            jump_x: jump_x,
+                            jump_y: jump_y,
+                        },
+                        CellStatus::Unset,
+                    );
                 }
             },
         );
     }
 
-    fn check_neighbours(
-        &self,
-        rectangle: &Rectangle,
-    ) -> CellStatus {
+    fn check_neighbours(&self, rectangle: &Rectangle) -> CellStatus {
         let is_set = |dx: i32, dy: i32| {
             let mut rect = *rectangle;
             rect.x = rectangle.x + (dx * rectangle.jump_x);
@@ -159,7 +171,7 @@ impl Game {
                         if status != CellStatus::Set {
                             CellStatus::Unset
                         } else {
-                        CellStatus::Markforremove
+                            CellStatus::Markforremove
                         }
                     }
                 }
@@ -230,7 +242,6 @@ impl Game {
             .build();
         Game {
             ctx: Gamecontext {
-                render_objects: HashSet::new(),
                 rectanges: HashMap::new(),
                 raylib_handle: rl,
                 raylib_thread: thread,
@@ -240,6 +251,7 @@ impl Game {
                 pause_play: false,
             },
             keyboard_event_handler: KeyBoardEventHandler::new(),
+            render_objects: HashSet::new(),
         }
     }
     fn render(render_objects: &HashSet<Renderobject>, draw_handle: &mut RaylibDrawHandle) {
@@ -266,20 +278,17 @@ impl Game {
             }
         }
     }
-    pub fn update(&mut self) {
-        if !self.ctx.pause_play {
-            return;
-        }
+    fn update(&mut self) {
         for (rectangle, cell_status) in &self.ctx.rectanges {
             match cell_status {
                 CellStatus::Unset => {
-                    self.ctx.render_objects.remove(&Renderobject {
+                    self.render_objects.remove(&Renderobject {
                         pos: [rectangle.x, rectangle.y, rectangle.jump_x, rectangle.jump_y],
                         object_type: Objecttypes::Rectangle,
                     });
                 }
                 CellStatus::Set => {
-                    self.ctx.render_objects.insert(Renderobject {
+                    self.render_objects.insert(Renderobject {
                         pos: [rectangle.x, rectangle.y, rectangle.jump_x, rectangle.jump_y],
                         object_type: Objecttypes::Rectangle,
                     });
@@ -324,7 +333,7 @@ impl Game {
                 .raylib_handle
                 .begin_drawing(&self.ctx.raylib_thread);
             d.clear_background(Color::BLACK);
-            Game::render(&self.ctx.render_objects, &mut d);
+            Game::render(&self.render_objects, &mut d);
             frame_count += 1;
         }
     }
