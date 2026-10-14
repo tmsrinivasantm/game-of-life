@@ -37,7 +37,7 @@ struct Gamecontext {
     raylib_handle: RaylibHandle,
     raylib_thread: RaylibThread,
     screen_height: i32,
-    rectanges: HashMap<Rectangle, CellStatus>,
+    rectangles: HashMap<Rectangle, CellStatus>,
     screen_width: i32,
     pause_play: bool,
     grid_size: i32,
@@ -92,8 +92,8 @@ impl Game {
                     jump_x: jump_x,
                     jump_y: jump_y,
                 };
-                let Some(cell_status) = ctx.rectanges.get(&rectangle) else {
-                    ctx.rectanges.insert(
+                let Some(cell_status) = ctx.rectangles.get(&rectangle) else {
+                    ctx.rectangles.insert(
                         Rectangle {
                             x: rectx,
                             y: recty,
@@ -105,7 +105,7 @@ impl Game {
                     return;
                 };
                 if matches!(cell_status, CellStatus::Unset) {
-                    ctx.rectanges.insert(
+                    ctx.rectangles.insert(
                         Rectangle {
                             x: rectx,
                             y: recty,
@@ -115,7 +115,7 @@ impl Game {
                         CellStatus::Set,
                     );
                 } else {
-                    ctx.rectanges.insert(
+                    ctx.rectangles.insert(
                         Rectangle {
                             x: rectx,
                             y: recty,
@@ -136,7 +136,7 @@ impl Game {
             rect.y = rectangle.y + (dy * rectangle.jump_y);
 
             if rect.x >= 0 && rect.y >= 0 {
-                self.ctx.rectanges.get(&rect) == Some(&CellStatus::Set)
+                self.ctx.rectangles.get(&rect) == Some(&CellStatus::Set)
             } else {
                 false
             }
@@ -156,7 +156,7 @@ impl Game {
         .filter(|&&(dx, dy)| is_set(dx, dy))
         .count() as u8;
 
-        match self.ctx.rectanges.get(rectangle) {
+        match self.ctx.rectangles.get(rectangle) {
             Some(&status) => {
                 if status != CellStatus::Set {
                     if cell_count == 3 {
@@ -200,7 +200,7 @@ impl Game {
                 visited.insert(r, self.check_neighbours(&r));
             }
         };
-        for (rectangle, _) in &self.ctx.rectanges {
+        for (rectangle, _) in &self.ctx.rectangles {
             [
                 (0, -1),
                 (0, 1),
@@ -220,10 +220,10 @@ impl Game {
             let cell_status = visited.get(rectangle).unwrap_or(&CellStatus::Unset);
             match cell_status {
                 CellStatus::Markforset => {
-                    self.ctx.rectanges.insert(*rectangle, CellStatus::Set);
+                    self.ctx.rectangles.insert(*rectangle, CellStatus::Set);
                 }
                 CellStatus::Markforremove => {
-                    self.ctx.rectanges.insert(*rectangle, CellStatus::Unset);
+                    self.ctx.rectangles.insert(*rectangle, CellStatus::Unset);
                 }
                 _ => (),
             }
@@ -242,7 +242,7 @@ impl Game {
             .build();
         Game {
             ctx: Gamecontext {
-                rectanges: HashMap::new(),
+                rectangles: HashMap::new(),
                 raylib_handle: rl,
                 raylib_thread: thread,
                 screen_height: screen_height,
@@ -279,7 +279,7 @@ impl Game {
         }
     }
     fn update(&mut self) {
-        for (rectangle, cell_status) in &self.ctx.rectanges {
+        for (rectangle, cell_status) in &self.ctx.rectangles {
             match cell_status {
                 CellStatus::Unset => {
                     self.render_objects.remove(&Renderobject {
