@@ -33,6 +33,7 @@ struct Renderobject {
     object_type: Objecttypes,
 }
 
+#[allow(unused)]
 struct Gamecontext {
     raylib_handle: RaylibHandle,
     raylib_thread: RaylibThread,
@@ -41,6 +42,7 @@ struct Gamecontext {
     screen_width: i32,
     pause_play: bool,
     grid_size: i32,
+    fps: u32,
 }
 pub struct Game {
     ctx: Gamecontext,
@@ -49,30 +51,30 @@ pub struct Game {
 }
 
 impl Game {
-    fn set_grid(&mut self, slices: [i32; 2], screen_width: i32, grid_size: i32) {
+    fn set_grid(&mut self, slices: [i32; 2]) {
         let mut pos = 0;
-        let jump_x = screen_width / slices[0];
-        let jump_y = grid_size / slices[1];
+        let jump_x = self.ctx.screen_width / slices[0];
+        let jump_y = self.ctx.grid_size / slices[1];
         self.render_objects.insert(Renderobject {
-            pos: [pos, 0, pos, grid_size],
+            pos: [pos, 0, pos, self.ctx.grid_size],
             object_type: Objecttypes::Line,
         });
         for _ in 0..slices[0] {
             pos += jump_x;
             self.render_objects.insert(Renderobject {
-                pos: [pos, 0, pos, grid_size],
+                pos: [pos, 0, pos, self.ctx.grid_size],
                 object_type: Objecttypes::Line,
             });
         }
         pos = 0;
         self.render_objects.insert(Renderobject {
-            pos: [0, pos, screen_width, pos],
+            pos: [0, pos, self.ctx.screen_width, pos],
             object_type: Objecttypes::Line,
         });
         for _ in 0..slices[1] {
             pos += jump_y;
             self.render_objects.insert(Renderobject {
-                pos: [0, pos, screen_width, pos],
+                pos: [0, pos, self.ctx.screen_width, pos],
                 object_type: Objecttypes::Line,
             });
         }
@@ -81,7 +83,7 @@ impl Game {
             "set-cell",
             MouseButton::MOUSE_BUTTON_LEFT,
             move |ctx: &mut Gamecontext, event_metadata: EventMetadata| {
-                if event_metadata.mouse_pos_y > grid_size || event_metadata.mouse_pos_y < 0 {
+                if event_metadata.mouse_pos_y > ctx.grid_size || event_metadata.mouse_pos_y < 0 {
                     return;
                 }
                 let rectx = (event_metadata.mouse_pos_x / jump_x) * jump_x;
@@ -114,7 +116,7 @@ impl Game {
                         },
                         CellStatus::Set,
                     );
-                } else {
+                } else if matches!(cell_status, CellStatus::Set) {
                     ctx.rectangles.insert(
                         Rectangle {
                             x: rectx,
@@ -132,14 +134,16 @@ impl Game {
     fn check_neighbours(&self, rectangle: &Rectangle) -> CellStatus {
         let is_set = |dx: i32, dy: i32| {
             let mut rect = *rectangle;
-            rect.x = rectangle.x + (dx * rectangle.jump_x);
-            rect.y = rectangle.y + (dy * rectangle.jump_y);
+            rect.x = (rectangle.x + (dx * rectangle.jump_x)) % self.ctx.grid_size;
+            rect.y = (rectangle.y + (dy * rectangle.jump_y)) % self.ctx.grid_size;
 
-            if rect.x >= 0 && rect.y >= 0 {
-                self.ctx.rectangles.get(&rect) == Some(&CellStatus::Set)
-            } else {
-                false
+            if rect.x < 0  {
+                rect.x = self.ctx.grid_size + rect.x;
             }
+            if rect.y < 0  {
+                rect.y = self.ctx.grid_size + rect.y;
+            }
+            self.ctx.rectangles.get(&rect) == Some(&CellStatus::Set)
         };
 
         let cell_count = [
@@ -194,13 +198,22 @@ impl Game {
         let mut visited: HashMap<Rectangle, CellStatus> = HashMap::new();
         let mut cover_neighbourhood = |dx: i32, dy: i32, rectangle: &Rectangle| {
             let mut r = *rectangle;
-            r.x = rectangle.x + (dx * rectangle.jump_x);
-            r.y = rectangle.y + (dy * rectangle.jump_y);
-            if !visited.contains_key(&r) && r.x >= 0 && r.y >= 0 {
+            r.x = (rectangle.x + (dx * rectangle.jump_x)) % self.ctx.grid_size;
+            r.y = (rectangle.y + (dy * rectangle.jump_y)) % self.ctx.grid_size;
+            if r.x < 0  {
+                r.x = self.ctx.grid_size + r.x;
+            }
+            if r.y < 0  {
+                r.y = self.ctx.grid_size + r.y;
+            }
+            if !visited.contains_key(&r) {
                 visited.insert(r, self.check_neighbours(&r));
             }
         };
-        for (rectangle, _) in &self.ctx.rectangles {
+        for (rectangle, cell_status) in &self.ctx.rectangles {
+            if matches!(cell_status, CellStatus::Unset) {
+                continue;
+            }
             [
                 (0, -1),
                 (0, 1),
@@ -234,12 +247,14 @@ impl Game {
         let screen_width: i32 = 1200;
         let grid_size: i32 = 1200;
         let screen_height: i32 = 1300;
-        let (rl, thread) = raylib::init()
+        let fps = 60u32;
+        let (mut rl, thread) = raylib::init()
             .size(screen_width, screen_height)
             .msaa_4x()
             .vsync()
             .title("Game Of Life")
             .build();
+        rl.set_target_fps(fps);
         Game {
             ctx: Gamecontext {
                 rectangles: HashMap::new(),
@@ -249,13 +264,20 @@ impl Game {
                 screen_width: screen_width,
                 grid_size: grid_size,
                 pause_play: false,
+                fps: fps,
             },
             keyboard_event_handler: KeyBoardEventHandler::new(),
             render_objects: HashSet::new(),
         }
     }
-    fn render(render_objects: &HashSet<Renderobject>, draw_handle: &mut RaylibDrawHandle) {
-        for object in render_objects {
+    fn render(&mut self) {
+        let mut draw_handle = self
+            .ctx
+            .raylib_handle
+            .begin_drawing(&self.ctx.raylib_thread);
+        draw_handle.clear_background(Color::BLACK);
+
+        for object in &self.render_objects {
             match object.object_type {
                 Objecttypes::Rectangle => {
                     draw_handle.draw_rectangle(
@@ -298,13 +320,9 @@ impl Game {
         }
     }
     pub fn run(mut self) {
-        let screen_width: i32 = self.ctx.screen_width;
-        let grid_size: i32 = self.ctx.grid_size;
-        let fps = 60;
         let slices = [40, 40];
-        self.ctx.raylib_handle.set_target_fps(fps);
 
-        self.set_grid(slices, screen_width, grid_size);
+        self.set_grid(slices);
 
         self.keyboard_event_handler.add_keyboard_event(
             "pause-play",
@@ -322,18 +340,13 @@ impl Game {
             self.keyboard_event_handler
                 .capture_mouse_events(&mut self.ctx);
 
-            if frame_count == 30 {
+            if frame_count == self.ctx.fps / 6 {
                 self.calculate();
                 frame_count = 0;
             }
 
             self.update();
-            let mut d = self
-                .ctx
-                .raylib_handle
-                .begin_drawing(&self.ctx.raylib_thread);
-            d.clear_background(Color::BLACK);
-            Game::render(&self.render_objects, &mut d);
+            self.render();
             frame_count += 1;
         }
     }
