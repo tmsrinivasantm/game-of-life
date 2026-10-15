@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use raylib::ffi::{KeyboardKey, MouseButton};
 
-use super::Gamecontext;
+use super::GameContext;
 
 pub struct EventMetadata {
     pub key_pressed: Option<KeyboardKey>,
@@ -12,7 +12,7 @@ pub struct EventMetadata {
 }
 
 pub struct KeyBoardEventHandler {
-    listeners: HashMap<&'static str, Box<dyn FnMut(&mut Gamecontext, EventMetadata)>>,
+    listeners: HashMap<&'static str, Box<dyn FnMut(&mut GameContext, EventMetadata)>>,
     keyboard_fire_buffer: HashMap<KeyboardKey, Vec<&'static str>>,
     mouse_fire_buffer: HashMap<MouseButton, Vec<&'static str>>,
 }
@@ -27,7 +27,7 @@ impl KeyBoardEventHandler {
     }
     pub fn add_keyboard_event<T>(&mut self, event_tag: &'static str, key: KeyboardKey, callback: T)
     where
-        T: FnMut(&mut Gamecontext, EventMetadata) + 'static,
+        T: FnMut(&mut GameContext, EventMetadata) + 'static,
     {
         if self.listeners.contains_key(event_tag) {
             panic!("[ERROR]: Event handle already registered");
@@ -41,7 +41,7 @@ impl KeyBoardEventHandler {
     }
     pub fn add_mouse_event<T>(&mut self, event_tag: &'static str, button: MouseButton, callback: T)
     where
-        T: FnMut(&mut Gamecontext, EventMetadata) + 'static,
+        T: FnMut(&mut GameContext, EventMetadata) + 'static,
     {
         if self.listeners.contains_key(event_tag) {
             panic!("[ERROR]: Event handle already registered");
@@ -53,7 +53,7 @@ impl KeyBoardEventHandler {
         }
         self.mouse_fire_buffer.insert(button, vec![event_tag]);
     }
-    pub fn capture_keyboard_events(&mut self, ctx: &mut Gamecontext) {
+    pub fn capture_keyboard_events(&mut self, ctx: &mut GameContext) {
         let Some(key_pressed) = ctx.raylib_handle.get_key_pressed() else {
             return;
         };
@@ -75,7 +75,7 @@ impl KeyBoardEventHandler {
             );
         }
     }
-    pub fn capture_mouse_events(&mut self, ctx: &mut Gamecontext) {
+    pub fn capture_mouse_events(&mut self, ctx: &mut GameContext) {
         if !ctx
             .raylib_handle
             .is_mouse_button_pressed(MouseButton::MOUSE_BUTTON_LEFT)
