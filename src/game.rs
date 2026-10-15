@@ -52,28 +52,25 @@ pub struct Game {
 
 impl Game {
     fn set_grid(&mut self, slices: [i32; 2]) {
-        let mut pos = 0;
         let jump_x = self.ctx.screen_width / slices[0];
         let jump_y = self.ctx.grid_size / slices[1];
-        self.render_objects.insert(RenderObject {
-            pos: [pos, 0, pos, self.ctx.grid_size],
-            object_type: ObjectTypes::Line,
-        });
+
+        let mut pos = 0;
         for _ in 0..=slices[0] {
-            pos += jump_x;
             self.render_objects.insert(RenderObject {
                 pos: [pos, 0, pos, self.ctx.grid_size],
                 object_type: ObjectTypes::Line,
             });
+            pos += jump_x;
         }
-        pos = 0;
 
-        for _ in 0..slices[1] {
-            pos += jump_y;
+        pos = 0;
+        for _ in 0..=slices[1] {
             self.render_objects.insert(RenderObject {
                 pos: [0, pos, self.ctx.screen_width, pos],
                 object_type: ObjectTypes::Line,
             });
+            pos += jump_y;
         }
 
         self.keyboard_event_handler.add_mouse_event(
