@@ -44,7 +44,7 @@ impl KeyBoardEventHandler {
         T: FnMut(&mut GameContext, EventMetadata) + 'static,
     {
         if self.listeners.contains_key(event_tag) {
-            panic!("[ERROR]: Event handle already registered");
+            return;
         }
         self.listeners.insert(event_tag, Box::new(callback));
         if let Some(thing) = self.mouse_fire_buffer.get_mut(&button) {
