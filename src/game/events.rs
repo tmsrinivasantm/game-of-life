@@ -104,4 +104,18 @@ impl EventHandler {
             );
         }
     }
+    pub fn fire_generic_event(&mut self, ctx: &mut GameContext, event_tag: &'static str) {
+        let Some(callback) = self.listeners.get_mut(event_tag) else {
+            return;
+        };
+        callback(
+            ctx,
+            EventMetadata {
+                key_pressed: None,
+                mouse_pressed: None,
+                mouse_pos_x: ctx.raylib_handle.get_mouse_x(),
+                mouse_pos_y: ctx.raylib_handle.get_mouse_y(),
+            },
+        );
+    }
 }
