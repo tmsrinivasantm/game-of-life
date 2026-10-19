@@ -1,9 +1,8 @@
 use raylib::{ffi::KeyboardKey, prelude::*};
-use std::collections::{VecDeque};
 
 mod events;
 
-use events::{EventMetadata, EventHandler};
+use events::{EventHandler, EventMetadata};
 
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]
 struct Cell {
@@ -11,22 +10,17 @@ struct Cell {
     y: i32,
 }
 
+struct Line {
+    x1: i32,
+    y1: i32,
+    x2: i32,
+    y2: i32,
+}
+
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]
 enum CellStatus {
     Set,
     Unset,
-}
-
-#[derive(PartialEq, Eq)]
-enum ObjectTypes {
-    Rectangle,
-    Line,
-}
-
-#[derive(PartialEq, Eq)]
-struct RenderObject {
-    pos: [i32; 4],
-    object_type: ObjectTypes,
 }
 
 struct GameContext {
@@ -45,7 +39,7 @@ struct GameContext {
 pub struct Game {
     ctx: GameContext,
     event_handler: EventHandler,
-    render_objects: VecDeque<RenderObject>,
+    grid_cache: Vec<Line>,
 }
 
 impl Game {
@@ -55,18 +49,22 @@ impl Game {
 
         let mut pos = 0;
         for _ in 0..=self.ctx.slices[0] {
-            self.render_objects.push_back(RenderObject {
-                pos: [pos, 0, pos, self.ctx.grid_size],
-                object_type: ObjectTypes::Line,
+            self.grid_cache.push(Line {
+                x1: pos,
+                y1: 0,
+                x2: pos,
+                y2: self.ctx.grid_size,
             });
             pos += self.ctx.jump_x;
         }
 
         pos = 0;
         for _ in 0..=self.ctx.slices[1] {
-            self.render_objects.push_back(RenderObject {
-                pos: [0, pos, self.ctx.grid_size, pos],
-                object_type: ObjectTypes::Line,
+            self.grid_cache.push(Line {
+                x1: 0,
+                y1: pos,
+                x2: self.ctx.grid_size,
+                y2: pos,
             });
             pos += self.ctx.jump_y;
         }
@@ -218,20 +216,7 @@ impl Game {
                 fps: fps,
             },
             event_handler: EventHandler::new(),
-            render_objects: VecDeque::with_capacity((slices[0] * slices[1]) as usize),
-        }
-    }
-    fn update(&mut self) {
-        for rectangle in &self.ctx.live_cells {
-            self.render_objects.push_front(RenderObject {
-                pos: [
-                    rectangle.x * self.ctx.jump_x,
-                    rectangle.y * self.ctx.jump_y,
-                    self.ctx.jump_x,
-                    self.ctx.jump_y,
-                ],
-                object_type: ObjectTypes::Rectangle,
-            });
+            grid_cache: Vec::new(),
         }
     }
     fn render(&mut self) {
@@ -241,36 +226,24 @@ impl Game {
             .begin_drawing(&self.ctx.raylib_thread);
         draw_handle.clear_background(Color::BLACK);
 
-        loop {
-            let Some(object) = self.render_objects.front() else {
-                return;
-            };
-            match object.object_type {
-                ObjectTypes::Rectangle => {
-                    draw_handle.draw_rectangle(
-                        object.pos[0],
-                        object.pos[1],
-                        object.pos[2], // jump_x
-                        object.pos[3], // jump_y
-                        Color::RED,
-                    );
-                    self.render_objects.pop_front();
-                }
-                ObjectTypes::Line => {
-                    break;
-                }
-            }
+        for cells in &self.ctx.live_cells {
+            draw_handle.draw_rectangle(
+                cells.x * self.ctx.jump_x,
+                cells.y * self.ctx.jump_y,
+                self.ctx.jump_x, // jump_x
+                self.ctx.jump_y, // jump_y
+                Color::RED,
+            );
         }
-        for object in &self.render_objects {
-            if matches!(object.object_type, ObjectTypes::Line) {
-                draw_handle.draw_line(
-                    object.pos[0],
-                    object.pos[1],
-                    object.pos[2],
-                    object.pos[3], // screen_height
-                    Color::WHITE,
-                );
-            }
+
+        for object in &self.grid_cache {
+            draw_handle.draw_line(
+                object.x1,
+                object.y1,
+                object.x2,
+                object.y2, // screen_height
+                Color::WHITE,
+            );
         }
     }
     pub fn run(mut self) {
@@ -292,10 +265,8 @@ impl Game {
         self.set_grid();
 
         while !self.ctx.raylib_handle.window_should_close() {
-            self.event_handler
-                .capture_keyboard_events(&mut self.ctx);
-            self.event_handler
-                .capture_mouse_events(&mut self.ctx);
+            self.event_handler.capture_keyboard_events(&mut self.ctx);
+            self.event_handler.capture_mouse_events(&mut self.ctx);
 
             if frame_count == self.ctx.fps / 6 {
                 self.calculate(&mut board_vec, &mut visited);
@@ -307,7 +278,6 @@ impl Game {
             //     self.ctx.raylib_handle.get_screen_height()
             // );
 
-            self.update();
             self.render();
             frame_count += 1;
         }
