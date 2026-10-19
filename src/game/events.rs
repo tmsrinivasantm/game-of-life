@@ -11,21 +11,21 @@ pub struct EventMetadata {
     pub mouse_pos_y: i32,
 }
 
-pub struct KeyBoardEventHandler {
+pub struct EventHandler {
     listeners: HashMap<&'static str, Box<dyn FnMut(&mut GameContext, EventMetadata)>>,
     keyboard_fire_buffer: HashMap<KeyboardKey, Vec<&'static str>>,
     mouse_fire_buffer: HashMap<MouseButton, Vec<&'static str>>,
 }
 
-impl KeyBoardEventHandler {
-    pub fn new() -> KeyBoardEventHandler {
-        KeyBoardEventHandler {
+impl EventHandler {
+    pub fn new() -> EventHandler {
+        EventHandler {
             listeners: HashMap::new(),
             keyboard_fire_buffer: HashMap::new(),
             mouse_fire_buffer: HashMap::new(),
         }
     }
-    pub fn add_keyboard_event<T>(&mut self, event_tag: &'static str, key: KeyboardKey, callback: T)
+    pub fn add_generic_event<T>(&mut self, event_tag: &'static str, callback: T)
     where
         T: FnMut(&mut GameContext, EventMetadata) + 'static,
     {
@@ -33,6 +33,12 @@ impl KeyBoardEventHandler {
             panic!("[ERROR]: Event handle already registered");
         }
         self.listeners.insert(event_tag, Box::new(callback));
+    }
+    pub fn add_keyboard_event<T>(&mut self, event_tag: &'static str, key: KeyboardKey, callback: T)
+    where
+        T: FnMut(&mut GameContext, EventMetadata) + 'static,
+    {
+        self.add_generic_event(event_tag, callback);
         if let Some(thing) = self.keyboard_fire_buffer.get_mut(&key) {
             thing.push(event_tag);
             return;
@@ -43,10 +49,7 @@ impl KeyBoardEventHandler {
     where
         T: FnMut(&mut GameContext, EventMetadata) + 'static,
     {
-        if self.listeners.contains_key(event_tag) {
-            return;
-        }
-        self.listeners.insert(event_tag, Box::new(callback));
+        self.add_generic_event(event_tag, callback);
         if let Some(thing) = self.mouse_fire_buffer.get_mut(&button) {
             thing.push(event_tag);
             return;

@@ -1,17 +1,17 @@
 use raylib::{ffi::KeyboardKey, prelude::*};
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{VecDeque};
 
 mod events;
 
-use events::{EventMetadata, KeyBoardEventHandler};
+use events::{EventMetadata, EventHandler};
 
-#[derive(PartialEq, Eq, Copy, Clone, Hash, Debug)]
+#[derive(PartialEq, Eq, Copy, Clone, Debug)]
 struct Cell {
     x: i32,
     y: i32,
 }
 
-#[derive(PartialEq, Eq, Copy, Clone, Hash, Debug)]
+#[derive(PartialEq, Eq, Copy, Clone, Debug)]
 enum CellStatus {
     Set,
     Unset,
@@ -33,7 +33,7 @@ struct GameContext {
     raylib_handle: RaylibHandle,
     raylib_thread: RaylibThread,
     screen_height: i32,
-    live_cells: HashSet<Cell>,
+    live_cells: Vec<Cell>,
     screen_width: i32,
     pause_play: bool,
     grid_size: i32,
@@ -44,7 +44,7 @@ struct GameContext {
 }
 pub struct Game {
     ctx: GameContext,
-    keyboard_event_handler: KeyBoardEventHandler,
+    event_handler: EventHandler,
     render_objects: VecDeque<RenderObject>,
 }
 
@@ -71,7 +71,7 @@ impl Game {
             pos += self.ctx.jump_y;
         }
 
-        self.keyboard_event_handler.add_mouse_event(
+        self.event_handler.add_mouse_event(
             "set-cell",
             MouseButton::MOUSE_BUTTON_LEFT,
             move |ctx: &mut GameContext, event_metadata: EventMetadata| {
@@ -85,15 +85,17 @@ impl Game {
                     y: recty / ctx.jump_y,
                 };
                 if !ctx.live_cells.contains(&cell) {
-                    ctx.live_cells.insert(cell);
+                    ctx.live_cells.push(cell);
                 } else {
-                    ctx.live_cells.remove(&cell);
+                    if let Some(position) = ctx.live_cells.iter().position(|x| *x == cell) {
+                        ctx.live_cells.remove(position);
+                    }
                 }
             },
         );
     }
 
-    fn check_neighbours(&self, cell: &Cell, board: &Vec<CellStatus>) -> Option<CellStatus> {
+    fn check_neighbours(&self, cell: &Cell, board: &Vec<bool>) -> Option<CellStatus> {
         let is_set = |dx: i32, dy: i32| {
             let mut c = *cell;
             c.x = (c.x + dx) % self.ctx.slices[0];
@@ -105,7 +107,7 @@ impl Game {
             if c.y < 0 {
                 c.y = self.ctx.slices[1] + c.y;
             }
-            board[(c.x + c.y * self.ctx.slices[0]) as usize] == CellStatus::Set
+            board[(c.x + c.y * self.ctx.slices[0]) as usize]
         };
 
         let cell_count = [
@@ -122,8 +124,7 @@ impl Game {
         .filter(|&&(dx, dy)| is_set(dx, dy))
         .count() as u8;
 
-        let status = board[(cell.x + cell.y * self.ctx.slices[0]) as usize];
-        if status != CellStatus::Set {
+        if !board[(cell.x + cell.y * self.ctx.slices[0]) as usize] {
             if cell_count == 3 {
                 Some(CellStatus::Set)
             } else {
@@ -138,17 +139,17 @@ impl Game {
         }
     }
 
-    fn calculate(&mut self) {
+    fn calculate(&mut self, board_vec: &mut Vec<bool>, visited: &mut Vec<bool>) {
         // mark for operation
+        board_vec.fill(false);
+        visited.fill(false);
         if !self.ctx.pause_play {
             return;
         }
-        let mut board_vec: Vec<CellStatus> =
-            vec![CellStatus::Unset; (self.ctx.slices[0] * self.ctx.slices[1]) as usize];
         for cell in &self.ctx.live_cells {
-            board_vec[(cell.x + cell.y * self.ctx.slices[0]) as usize] = CellStatus::Set;
+            board_vec[(cell.x + cell.y * self.ctx.slices[0]) as usize] = true;
         }
-        let mut visited: HashMap<Cell, CellStatus> = HashMap::new();
+        let mut new_live_cells: Vec<Cell> = Vec::new();
         let mut cover_neighbourhood = |dx: i32, dy: i32, cell: &Cell| {
             let mut c = *cell;
             c.x = (c.x + dx) % self.ctx.slices[0];
@@ -159,9 +160,12 @@ impl Game {
             if c.y < 0 {
                 c.y = self.ctx.slices[1] + c.y;
             }
-            if !visited.contains_key(&c) {
+            if !visited[(c.x + c.y * self.ctx.slices[0]) as usize] {
                 if let Some(cell_status) = self.check_neighbours(&c, &board_vec) {
-                    visited.insert(c, cell_status);
+                    if matches!(cell_status, CellStatus::Set) {
+                        new_live_cells.push(c);
+                    }
+                    visited[(c.x + c.y * self.ctx.slices[0]) as usize] = true;
                 }
             }
         };
@@ -181,16 +185,8 @@ impl Game {
             .for_each(|&(dx, dy)| cover_neighbourhood(dx, dy, &cell));
         }
         // apply operation
-        for (cell, cell_status) in visited {
-            match cell_status {
-                CellStatus::Set => {
-                    self.ctx.live_cells.insert(cell);
-                }
-                CellStatus::Unset => {
-                    self.ctx.live_cells.remove(&cell);
-                }
-            }
-        }
+
+        self.ctx.live_cells = new_live_cells;
     }
 
     pub fn new() -> Game {
@@ -209,7 +205,7 @@ impl Game {
         rl.set_target_fps(fps);
         Game {
             ctx: GameContext {
-                live_cells: HashSet::new(),
+                live_cells: Vec::new(),
                 raylib_handle: rl,
                 raylib_thread: thread,
                 screen_height: screen_height,
@@ -221,7 +217,7 @@ impl Game {
                 slices: slices,
                 fps: fps,
             },
-            keyboard_event_handler: KeyBoardEventHandler::new(),
+            event_handler: EventHandler::new(),
             render_objects: VecDeque::with_capacity((slices[0] * slices[1]) as usize),
         }
     }
@@ -278,7 +274,7 @@ impl Game {
         }
     }
     pub fn run(mut self) {
-        self.keyboard_event_handler.add_keyboard_event(
+        self.event_handler.add_keyboard_event(
             "pause-play",
             KeyboardKey::KEY_SPACE,
             move |ctx: &mut GameContext, _: EventMetadata| {
@@ -286,18 +282,23 @@ impl Game {
             },
         );
 
+        let mut board_vec: Vec<bool> =
+            vec![false; (self.ctx.slices[0] * self.ctx.slices[1]) as usize];
+        let mut visited: Vec<bool> =
+            vec![false; (self.ctx.slices[0] * self.ctx.slices[1]) as usize];
+
         let mut frame_count = 0;
 
         self.set_grid();
 
         while !self.ctx.raylib_handle.window_should_close() {
-            self.keyboard_event_handler
+            self.event_handler
                 .capture_keyboard_events(&mut self.ctx);
-            self.keyboard_event_handler
+            self.event_handler
                 .capture_mouse_events(&mut self.ctx);
 
             if frame_count == self.ctx.fps / 6 {
-                self.calculate();
+                self.calculate(&mut board_vec, &mut visited);
                 frame_count = 0;
             }
             // println!(
