@@ -137,7 +137,12 @@ impl Game {
         }
     }
 
-    fn calculate(&mut self, board_vec: &mut Vec<bool>, visited: &mut Vec<bool>) {
+    fn calculate(
+        &mut self,
+        board_vec: &mut Vec<bool>,
+        visited: &mut Vec<bool>,
+        new_live_cells: &mut Vec<Cell>,
+    ) {
         // mark for operation
         board_vec.fill(false);
         visited.fill(false);
@@ -147,7 +152,7 @@ impl Game {
         for cell in &self.ctx.live_cells {
             board_vec[(cell.x + cell.y * self.ctx.slices[0]) as usize] = true;
         }
-        let mut new_live_cells: Vec<Cell> = Vec::new();
+        new_live_cells.clear();
         let mut cover_neighbourhood = |dx: i32, dy: i32, cell: &Cell| {
             let mut c = *cell;
             c.x = (c.x + dx) % self.ctx.slices[0];
@@ -184,7 +189,7 @@ impl Game {
         }
         // apply operation
 
-        self.ctx.live_cells = new_live_cells;
+        std::mem::swap(&mut self.ctx.live_cells, new_live_cells);
     }
 
     pub fn new() -> Game {
@@ -259,6 +264,7 @@ impl Game {
             vec![false; (self.ctx.slices[0] * self.ctx.slices[1]) as usize];
         let mut visited: Vec<bool> =
             vec![false; (self.ctx.slices[0] * self.ctx.slices[1]) as usize];
+        let mut new_live_cells: Vec<Cell> = Vec::new();
 
         let mut frame_count = 0;
 
@@ -269,7 +275,7 @@ impl Game {
             self.event_handler.capture_mouse_events(&mut self.ctx);
 
             if frame_count == self.ctx.fps / 6 {
-                self.calculate(&mut board_vec, &mut visited);
+                self.calculate(&mut board_vec, &mut visited, &mut new_live_cells);
                 frame_count = 0;
             }
             // println!(
