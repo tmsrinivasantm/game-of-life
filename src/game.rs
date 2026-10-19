@@ -144,15 +144,17 @@ impl Game {
         new_live_cells: &mut Vec<Cell>,
     ) {
         // mark for operation
-        board_vec.fill(false);
-        visited.fill(false);
         if !self.ctx.pause_play {
             return;
         }
+
+        board_vec.fill(false);
+        visited.fill(false);
+        new_live_cells.clear();
+
         for cell in &self.ctx.live_cells {
             board_vec[(cell.x + cell.y * self.ctx.slices[0]) as usize] = true;
         }
-        new_live_cells.clear();
         let mut cover_neighbourhood = |dx: i32, dy: i32, cell: &Cell| {
             let mut c = *cell;
             c.x = (c.x + dx) % self.ctx.slices[0];
@@ -185,7 +187,7 @@ impl Game {
                 (-1, 1),
             ]
             .iter()
-            .for_each(|&(dx, dy)| cover_neighbourhood(dx, dy, &cell));
+            .for_each(|&(dx, dy)| cover_neighbourhood(dx, dy, cell));
         }
         // apply operation
 

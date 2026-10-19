@@ -1,4 +1,5 @@
 .git
 /target
+/stress_test.txt
 /review.md
 /optimizations.md
