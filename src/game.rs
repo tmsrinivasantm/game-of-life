@@ -49,6 +49,7 @@ impl Game {
         self.ctx.grid_size = minimum - (minimum % min(self.ctx.jump_x, self.ctx.jump_y));
 
         let mut pos = 0;
+        let mut count = 0;
         self.grid_cache.clear();
         while pos < self.ctx.grid_size {
             self.grid_cache.push(Line {
@@ -58,6 +59,7 @@ impl Game {
                 y2: self.ctx.grid_size,
             });
             pos += self.ctx.jump_x;
+            count += 1;
         }
         self.grid_cache.push(Line {
             x1: pos,
@@ -66,7 +68,10 @@ impl Game {
             y2: self.ctx.grid_size,
         });
 
+        self.ctx.slices[0] = count;
+
         pos = 0;
+        count = 0;
         while pos < self.ctx.grid_size {
             self.grid_cache.push(Line {
                 x1: 0,
@@ -75,6 +80,7 @@ impl Game {
                 y2: pos,
             });
             pos += self.ctx.jump_y;
+            count += 1;
         }
         self.grid_cache.push(Line {
             x1: 0,
@@ -82,6 +88,7 @@ impl Game {
             x2: self.ctx.grid_size,
             y2: pos,
         });
+        self.ctx.slices[1] = count;
     }
 
     fn check_neighbours(&self, cell: &Cell, board: &Vec<bool>) -> bool {
@@ -289,6 +296,8 @@ impl Game {
 
             if self.ctx.raylib_handle.is_window_resized() {
                 self.set_grid();
+                board_vec.resize((self.ctx.slices[0] * self.ctx.slices[1]) as usize, false);
+                visited.resize((self.ctx.slices[0] * self.ctx.slices[1]) as usize, false);
             }
 
             if frame_count == self.ctx.fps / 6 {
