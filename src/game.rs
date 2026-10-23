@@ -17,12 +17,6 @@ struct Line {
     y2: i32,
 }
 
-#[derive(PartialEq, Eq, Copy, Clone, Debug)]
-enum CellStatus {
-    Set,
-    Unset,
-}
-
 struct GameContext {
     raylib_handle: RaylibHandle,
     raylib_thread: RaylibThread,
@@ -42,13 +36,21 @@ pub struct Game {
     grid_cache: Vec<Line>,
 }
 
+fn min(a: i32, b: i32) -> i32 {
+    if a > b { b } else { a }
+}
 impl Game {
     fn set_grid(&mut self) {
-        self.ctx.jump_x = self.ctx.grid_size / self.ctx.slices[0];
-        self.ctx.jump_y = self.ctx.grid_size / self.ctx.slices[1];
+        self.ctx.screen_width = self.ctx.raylib_handle.get_screen_width();
+        self.ctx.screen_height = self.ctx.raylib_handle.get_screen_height();
+        let minimum = min(self.ctx.screen_width, self.ctx.screen_height);
+        self.ctx.jump_x = minimum / self.ctx.slices[0];
+        self.ctx.jump_y = minimum / self.ctx.slices[1];
+        self.ctx.grid_size = minimum - (minimum % min(self.ctx.jump_x, self.ctx.jump_y));
 
         let mut pos = 0;
-        for _ in 0..=self.ctx.slices[0] {
+        self.grid_cache.clear();
+        while pos < self.ctx.grid_size {
             self.grid_cache.push(Line {
                 x1: pos,
                 y1: 0,
@@ -57,9 +59,15 @@ impl Game {
             });
             pos += self.ctx.jump_x;
         }
+        self.grid_cache.push(Line {
+            x1: pos,
+            y1: 0,
+            x2: pos,
+            y2: self.ctx.grid_size,
+        });
 
         pos = 0;
-        for _ in 0..=self.ctx.slices[1] {
+        while pos < self.ctx.grid_size {
             self.grid_cache.push(Line {
                 x1: 0,
                 y1: pos,
@@ -68,32 +76,15 @@ impl Game {
             });
             pos += self.ctx.jump_y;
         }
-
-        self.event_handler.add_mouse_event(
-            "set-cell",
-            MouseButton::MOUSE_BUTTON_LEFT,
-            move |ctx: &mut GameContext, event_metadata: EventMetadata| {
-                if event_metadata.mouse_pos_y > ctx.grid_size || event_metadata.mouse_pos_y < 0 {
-                    return;
-                }
-                let rectx = (event_metadata.mouse_pos_x / ctx.jump_x) * ctx.jump_x;
-                let recty = (event_metadata.mouse_pos_y / ctx.jump_y) * ctx.jump_y;
-                let cell = Cell {
-                    x: rectx / ctx.jump_x,
-                    y: recty / ctx.jump_y,
-                };
-                if !ctx.live_cells.contains(&cell) {
-                    ctx.live_cells.push(cell);
-                } else {
-                    if let Some(position) = ctx.live_cells.iter().position(|x| *x == cell) {
-                        ctx.live_cells.remove(position);
-                    }
-                }
-            },
-        );
+        self.grid_cache.push(Line {
+            x1: 0,
+            y1: pos,
+            x2: self.ctx.grid_size,
+            y2: pos,
+        });
     }
 
-    fn check_neighbours(&self, cell: &Cell, board: &Vec<bool>) -> Option<CellStatus> {
+    fn check_neighbours(&self, cell: &Cell, board: &Vec<bool>) -> bool {
         let is_set = |dx: i32, dy: i32| {
             let mut c = *cell;
             c.x = (c.x + dx) % self.ctx.slices[0];
@@ -123,17 +114,9 @@ impl Game {
         .count() as u8;
 
         if !board[(cell.x + cell.y * self.ctx.slices[0]) as usize] {
-            if cell_count == 3 {
-                Some(CellStatus::Set)
-            } else {
-                None
-            }
+            cell_count == 3
         } else {
-            if cell_count == 3 || cell_count == 2 {
-                Some(CellStatus::Set)
-            } else {
-                Some(CellStatus::Unset)
-            }
+            cell_count == 3 || cell_count == 2
         }
     }
 
@@ -165,13 +148,11 @@ impl Game {
             if c.y < 0 {
                 c.y = self.ctx.slices[1] + c.y;
             }
-            if !visited[(c.x + c.y * self.ctx.slices[0]) as usize] {
-                if let Some(cell_status) = self.check_neighbours(&c, &board_vec) {
-                    if matches!(cell_status, CellStatus::Set) {
-                        new_live_cells.push(c);
-                    }
-                    visited[(c.x + c.y * self.ctx.slices[0]) as usize] = true;
-                }
+            if !visited[(c.x + c.y * self.ctx.slices[0]) as usize]
+                && self.check_neighbours(&c, &board_vec)
+            {
+                new_live_cells.push(c);
+                visited[(c.x + c.y * self.ctx.slices[0]) as usize] = true;
             }
         };
         for cell in &self.ctx.live_cells {
@@ -205,7 +186,8 @@ impl Game {
             .msaa_4x()
             .vsync()
             .title("Game Of Life")
-            .borderless_windowed_mode()
+            .resizable()
+            .highdpi()
             .build();
         rl.set_target_fps(fps);
         Game {
@@ -253,7 +235,7 @@ impl Game {
             );
         }
     }
-    pub fn run(mut self) {
+    fn set_basic_keyboard_mouse_events(&mut self) {
         self.event_handler.add_keyboard_event(
             "pause-play",
             KeyboardKey::KEY_SPACE,
@@ -262,6 +244,33 @@ impl Game {
             },
         );
 
+        self.event_handler.add_mouse_event(
+            "set-cell",
+            MouseButton::MOUSE_BUTTON_LEFT,
+            move |ctx: &mut GameContext, event_metadata: EventMetadata| {
+                if event_metadata.mouse_pos_y > ctx.grid_size || event_metadata.mouse_pos_y < 0 {
+                    return;
+                }
+                if event_metadata.mouse_pos_x > ctx.grid_size || event_metadata.mouse_pos_x < 0 {
+                    return;
+                }
+                let rectx = (event_metadata.mouse_pos_x / ctx.jump_x) * ctx.jump_x;
+                let recty = (event_metadata.mouse_pos_y / ctx.jump_y) * ctx.jump_y;
+                let cell = Cell {
+                    x: rectx / ctx.jump_x,
+                    y: recty / ctx.jump_y,
+                };
+                if !ctx.live_cells.contains(&cell) {
+                    ctx.live_cells.push(cell);
+                } else {
+                    if let Some(position) = ctx.live_cells.iter().position(|x| *x == cell) {
+                        ctx.live_cells.remove(position);
+                    }
+                }
+            },
+        );
+    }
+    pub fn run(mut self) {
         let mut board_vec: Vec<bool> =
             vec![false; (self.ctx.slices[0] * self.ctx.slices[1]) as usize];
         let mut visited: Vec<bool> =
@@ -272,19 +281,20 @@ impl Game {
 
         self.set_grid();
 
+        self.set_basic_keyboard_mouse_events();
+
         while !self.ctx.raylib_handle.window_should_close() {
             self.event_handler.capture_keyboard_events(&mut self.ctx);
             self.event_handler.capture_mouse_events(&mut self.ctx);
+
+            if self.ctx.raylib_handle.is_window_resized() {
+                self.set_grid();
+            }
 
             if frame_count == self.ctx.fps / 6 {
                 self.calculate(&mut board_vec, &mut visited, &mut new_live_cells);
                 frame_count = 0;
             }
-            // println!(
-            //     "{:?}x{:?}",
-            //     self.ctx.raylib_handle.get_screen_width(),
-            //     self.ctx.raylib_handle.get_screen_height()
-            // );
 
             self.render();
             frame_count += 1;

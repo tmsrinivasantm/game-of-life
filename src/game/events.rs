@@ -39,8 +39,8 @@ impl EventHandler {
         T: FnMut(&mut GameContext, EventMetadata) + 'static,
     {
         self.add_generic_event(event_tag, callback);
-        if let Some(thing) = self.keyboard_fire_buffer.get_mut(&key) {
-            thing.push(event_tag);
+        if let Some(buffer) = self.keyboard_fire_buffer.get_mut(&key) {
+            buffer.push(event_tag);
             return;
         }
         self.keyboard_fire_buffer.insert(key, vec![event_tag]);
@@ -50,8 +50,8 @@ impl EventHandler {
         T: FnMut(&mut GameContext, EventMetadata) + 'static,
     {
         self.add_generic_event(event_tag, callback);
-        if let Some(thing) = self.mouse_fire_buffer.get_mut(&button) {
-            thing.push(event_tag);
+        if let Some(buffer) = self.mouse_fire_buffer.get_mut(&button) {
+            buffer.push(event_tag);
             return;
         }
         self.mouse_fire_buffer.insert(button, vec![event_tag]);
